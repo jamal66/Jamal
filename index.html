@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wi-Fi LiDAR Scanner</title>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background-color: #050505;
+  color: #00ffcc;
+  font-family: 'Courier New', Courier, monospace;
+  overflow: hidden;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100vh;
+  padding: 20px;
+}
+header {
+  text-align: center;
+  margin-top: 10px;
+}
+h1 {
+  font-size: 1.2rem;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px #00ffcc;
+}
+.status {
+  font-size: 0.8rem;
+  color: #008866;
+  margin-top: 5px;
+}
+canvas {
+  border: 1px solid #00ffcc33;
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.1);
+}
+.controls {
+  margin-bottom: 20px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+button {
+  background: transparent;
+  border: 1px solid #00ffcc;
+  color: #00ffcc;
+  padding: 12px 24px;
+  font-size: 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+  transition: all 0.3s ease;
+}
+button:active {
+  background-color: #00ffcc;
+  color: #000;
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>WI-FI RF-LIDAR SCANNER</h1>
+  <div class="status" id="status">Systeem Gereed - Druk op Start</div>
+</header>
+<!-- Canvas waarop de radar/LiDAR wordt getekend -->
+<canvas id="radarCanvas"></canvas>
+<div class="controls">
+  <button id="scanBtn">START WI-FI SCAN</button>
+</div>
+<script>
+const canvas = document.getElementById('radarCanvas');
+const ctx = canvas.getContext('2d');
+const scanBtn = document.getElementById('scanBtn');
+const statusText = document.getElementById('status');
+
+// Maak canvas vierkant op basis van schermgrootte
+const size = Math.min(window.innerWidth - 40, window.innerHeight - 200);
+canvas.width = size;
+canvas.height = size;
+const centerX = size / 2;
+const centerY = size / 2;
+const radius = size / 2 - 10;
+
+let scanning = false;
+let angle = 0;
+let points = [];
+
+// Genereer 'nep' reflectiepunten (Gesimuleerde Wi-Fi weerkaatsingen)
+function generateFakeEnvironment() {
+  points = [];
+  const numPoints = 40;
+  for (let i = 0; i < numPoints; i++) {
+    const ptAngle = Math.random() * Math.PI * 2;
+    const ptDist = (Math.random() * 0.7 + 0.2) * radius; // Niet te dicht bij het midden
+    points.push({
+      x: centerX + ptDist * Math.cos(ptAngle),
+      y: centerY + ptDist * Math.sin(ptAngle),
+      angle: ptAngle,
+      opacity: 0
+    });
+  }
+}
+
+function drawRadarBase() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Cirkels tekenen (Afstandscirkels)
+  ctx.strokeStyle = 'rgba(0, 255, 204, 0.15)';
+  ctx.lineWidth = 1;
+  for (let r = radius / 4; r <= radius; r += radius / 4) {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Kruislijn
+  ctx.beginPath();
+  ctx.moveTo(centerX, 0);
+  ctx.lineTo(centerX, canvas.height);
+  ctx.moveTo(0, centerY);
+  ctx.lineTo(canvas.width, centerY);
+  ctx.stroke();
+}
+
+function updateAndDraw() {
+  drawRadarBase();
+  if (scanning) {
+    // Roterende laserstraal tekenen
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    const beamX = centerX + radius * Math.cos(angle);
+    const beamY = centerY + radius * Math.sin(angle);
+    ctx.lineTo(beamX, beamY);
+    ctx.strokeStyle = '#00ffcc';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Lichtstraal 'gloed' (sector)
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.arc(centerX, centerY, radius, angle - 0.2, angle);
+    ctx.fillStyle = 'rgba(0, 255, 204, 0.05)';
+    ctx.fill();
+
+    // Hoek vergroten
+    angle += 0.03;
+    if (angle > Math.PI * 2) angle = 0;
+
+    // Punten oplichten als de straal eroverheen gaat
+    points.forEach(pt => {
+      // Check of de straal dichtbij de hoek van het punt is
+      let diff = Math.abs(pt.angle - (angle % (Math.PI * 2)));
+      if (diff < 0.05) {
+        pt.opacity = 1.0; // Licht op
+      }
+      // Punten langzaam laten vervagen (LiDAR naloop effect)
+      if (pt.opacity > 0) {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0, 255, 204, ${pt.opacity})`;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#00ffcc";
+        ctx.fill();
+        ctx.shadowBlur = 0; // reset shadow
+        pt.opacity -= 0.005; // Vervagingssnelheid
+      }
+    });
+  }
+  requestAnimationFrame(updateAndDraw);
+}
+
+// Start / Stop Scan
+scanBtn.addEventListener('click', () => {
+  scanning = !scanning;
+  if (scanning) {
+    scanBtn.innerText = "STOP SCAN";
+    statusText.innerText = "Wi-Fi RF Signalen Analyse...";
+    statusText.style.color = "#00ffcc";
+    generateFakeEnvironment();
+  } else {
+    scanBtn.innerText = "START WI-FI SCAN";
+    statusText.innerText = "Scan Gepauzeerd";
+    statusText.style.color = "#008866";
+  }
+});
+
+// Optioneel: Gebruik telefoon bewegingssensor (Gyroscoop) om beeld te draaien
+if (window.DeviceOrientationEvent) {
+  window.addEventListener('deviceorientation', (event) => {
+    if(scanning && event.alpha) {
+      // Gebruik de kompasrichting van de telefoon om het raster te beïnvloeden
+      angle = (event.alpha * Math.PI) / 180;
+    }
+  });
+}
+
+// Start animatieloop
+updateAndDraw();
+</script>
+</body>
+</html>
